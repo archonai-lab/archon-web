@@ -1,1 +1,70 @@
 @import "tailwindcss";
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+/* Message appear animation */
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-message-in {
+  animation: message-in 0.3s ease-out;
+}
+
+/* Typing dots */
+@keyframes bounce-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-0.4rem);
+  }
+}
+
+.typing-dot {
+  animation: bounce-dot 1.4s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* Avatar glow pulse for latest speaker */
+@keyframes avatar-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 8px 2px currentColor;
+    opacity: 0.8;
+  }
+}
+
+.animate-avatar-glow {
+  animation: avatar-glow 2s ease-in-out 1;
+}
