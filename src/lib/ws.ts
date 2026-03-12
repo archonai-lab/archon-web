@@ -1,4 +1,4 @@
-import type { HubMessage, MeetingState, ChatMessage, Phase } from "./types";
+import type { HubMessage, MeetingState, ChatMessage, Proposal } from "./types";
 
 type Listener = (msg: HubMessage) => void;
 
@@ -21,6 +21,16 @@ export class HubConnection {
 
   get connected() { return this._connected; }
   get agentId() { return this._agentId; }
+  get url() { return this._url; }
+
+  /** Reconfigure and reconnect with new identity / URL */
+  reconnect(agentId: string, url?: string): void {
+    this.disconnect();
+    this.meetings.clear();
+    this._agentId = agentId;
+    if (url) this._url = url;
+    this.connect();
+  }
 
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) return;
@@ -78,12 +88,23 @@ export class HubConnection {
     return () => this.listeners.delete(fn);
   }
 
-  createMeeting(title: string, invitees: string[], agenda?: string, tokenBudget?: number): void {
-    this.send({ type: "meeting.create", title, invitees, agenda, tokenBudget });
+  createMeeting(title: string, invitees: string[], agenda?: string, tokenBudget?: number, methodology?: string): void {
+    this.send({
+      type: "meeting.create",
+      title,
+      invitees,
+      agenda,
+      tokenBudget,
+      ...(methodology ? { methodology } : {}),
+    });
   }
 
   joinMeeting(meetingId: string): void {
     this.send({ type: "meeting.join", meetingId });
+  }
+
+  speakInMeeting(meetingId: string, content: string): void {
+    this.send({ type: "meeting.speak", meetingId, content });
   }
 
   advanceMeeting(meetingId: string): void {
@@ -102,6 +123,25 @@ export class HubConnection {
         this.listAgents();
         break;
 
+      case "meeting.created": {
+        const state: MeetingState = {
+          id: msg.meetingId,
+          title: msg.title,
+          initiator: this._agentId,
+          phase: "present",
+          status: "active",
+          budgetRemaining: 0,
+          messages: [],
+          participants: msg.participants,
+          proposals: [],
+          actionItems: [],
+          phases: [],
+          capabilities: [],
+        };
+        this.meetings.set(msg.meetingId, state);
+        break;
+      }
+
       case "meeting.invite": {
         const state: MeetingState = {
           id: msg.meetingId,
@@ -113,6 +153,10 @@ export class HubConnection {
           budgetRemaining: 0,
           messages: [],
           participants: [],
+          proposals: [],
+          actionItems: [],
+          phases: [],
+          capabilities: [],
         };
         this.meetings.set(msg.meetingId, state);
         // Auto-join as observer
@@ -125,6 +169,13 @@ export class HubConnection {
         if (m) {
           m.phase = msg.phase;
           m.budgetRemaining = msg.budgetRemaining;
+          m.phaseDescription = msg.phaseDescription;
+          m.capabilities = msg.capabilities ?? [];
+
+          // Build up phases list as we see new phases
+          if (!m.phases.includes(msg.phase)) {
+            m.phases.push(msg.phase);
+          }
         }
         break;
       }
@@ -136,12 +187,55 @@ export class HubConnection {
             id: `${msg.meetingId}-${m.messages.length}`,
             agentId: msg.agentId,
             content: msg.content,
-            phase: msg.phase as Phase,
+            phase: msg.phase,
             tokenCount: msg.tokenCount,
             timestamp: new Date(),
           };
           m.messages.push(chatMsg);
           m.budgetRemaining = msg.budgetRemaining;
+        }
+        break;
+      }
+
+      case "meeting.proposal": {
+        const m = this.meetings.get(msg.meetingId);
+        if (m) {
+          // Ensure array is long enough for this index
+          while (m.proposals.length <= msg.proposalIndex) {
+            m.proposals.push({ agentId: "", proposal: "", votes: [] });
+          }
+          const p: Proposal = {
+            agentId: msg.agentId,
+            proposal: msg.proposal,
+            votes: [],
+          };
+          m.proposals[msg.proposalIndex] = p;
+        }
+        break;
+      }
+
+      case "meeting.vote_result": {
+        const m = this.meetings.get(msg.meetingId);
+        if (m && m.proposals[msg.proposalIndex]) {
+          m.proposals[msg.proposalIndex].votes.push({
+            agentId: msg.agentId,
+            vote: msg.vote,
+            reason: msg.reason,
+          });
+        }
+        break;
+      }
+
+      case "meeting.action_item": {
+        const m = this.meetings.get(msg.meetingId);
+        if (m) {
+          m.actionItems.push({
+            taskIndex: msg.taskIndex,
+            task: msg.task,
+            assigneeId: msg.assigneeId,
+            assignedBy: msg.assignedBy,
+            deadline: msg.deadline,
+          });
         }
         break;
       }

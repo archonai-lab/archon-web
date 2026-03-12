@@ -7,10 +7,11 @@ export function MeetingLauncher({
   onStart,
 }: {
   agents: AgentCard[];
-  onStart: (title: string, invitees: string[], agenda: string) => void;
+  onStart: (title: string, invitees: string[], agenda: string, methodology?: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [agenda, setAgenda] = useState("");
+  const [methodology, setMethodology] = useState("");
   const [selected, setSelected] = useState(new Set<string>());
 
   const toggleAgent = (id: string) => {
@@ -53,6 +54,22 @@ export function MeetingLauncher({
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-zinc-400 mb-1">
+            Methodology
+            <span className="text-zinc-600 font-normal ml-1">(optional)</span>
+          </label>
+          <input
+            value={methodology}
+            onChange={(e) => setMethodology(e.target.value)}
+            placeholder="general (default)"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <p className="text-xs text-zinc-600 mt-1">
+            Name of a methodology file in ~/.archon/methodologies/ (e.g. standup, retrospective)
+          </p>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-zinc-400 mb-2">
             Invite Agents ({selected.size} selected)
           </label>
@@ -64,9 +81,15 @@ export function MeetingLauncher({
         <button
           onClick={() => {
             if (canStart) {
-              onStart(title.trim(), [...selected], agenda.trim());
+              onStart(
+                title.trim(),
+                [...selected],
+                agenda.trim(),
+                methodology.trim() || undefined,
+              );
               setTitle("");
               setAgenda("");
+              setMethodology("");
               setSelected(new Set());
             }
           }}
