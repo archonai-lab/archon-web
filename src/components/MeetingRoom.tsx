@@ -28,17 +28,20 @@ function AgentAvatar({ agentId, glow }: { agentId: string; glow?: boolean }) {
   );
 }
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ agentId }: { agentId?: string }) {
+  const style = agentId ? agentStyle(agentId) : null;
   return (
     <div className="flex items-center gap-3 animate-message-in">
-      <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center shrink-0">
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${style ? style.bg : "bg-zinc-700"}`}>
         <div className="flex gap-1 items-center">
-          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-zinc-400" />
-          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-zinc-400" />
-          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-zinc-400" />
+          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-white/60" />
+          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-white/60" />
+          <span className="typing-dot w-1.5 h-1.5 rounded-full bg-white/60" />
         </div>
       </div>
-      <span className="text-xs text-zinc-600 italic">Agents thinking...</span>
+      <span className={`text-xs italic ${style ? style.text : "text-zinc-600"}`}>
+        {agentId ? `${agentId} thinking...` : "Agents thinking..."}
+      </span>
     </div>
   );
 }
@@ -47,16 +50,34 @@ export function MeetingRoom({
   meeting,
   onAdvance,
   onSpeak,
+  onPropose,
+  onVote,
+  onAssign,
+  onAcknowledge,
+  onCancel,
+  participants,
 }: {
   meeting: MeetingState;
   onAdvance: () => void;
   onSpeak: (content: string) => void;
+  onPropose?: (proposal: string) => void;
+  onVote?: (proposalIndex: number, vote: "approve" | "reject" | "abstain", reason?: string) => void;
+  onAssign?: (task: string, assigneeId: string, deadline?: string) => void;
+  onAcknowledge?: (taskIndex: number) => void;
+  onCancel?: () => void;
+  participants?: string[];
 }) {
   const [input, setInput] = useState("");
+  const [proposalInput, setProposalInput] = useState("");
+  const [taskInput, setTaskInput] = useState("");
+  const [assigneeInput, setAssigneeInput] = useState("");
+  const [deadlineInput, setDeadlineInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [thinkingVisible, setThinkingVisible] = useState(false);
 
   const isInitiatorOnly = meeting.capabilities.includes("initiator_only");
+  const hasProposals = meeting.capabilities.includes("proposals");
+  const hasAssignments = meeting.capabilities.includes("assignments");
   const isActive = meeting.status === "active" && !isInitiatorOnly;
   const msgCount = meeting.messages.length;
 
@@ -86,15 +107,34 @@ export function MeetingRoom({
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-zinc-100">{meeting.title}</h2>
           {meeting.status === "active" && (
-            <button
-              onClick={onAdvance}
-              className="px-3 py-1 rounded text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-            >
-              Advance Phase
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onAdvance}
+                className="px-3 py-1 rounded text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              >
+                Advance Phase
+              </button>
+              {onCancel && (
+                <button
+                  onClick={() => {
+                    if (window.confirm("Cancel this meeting? All participants will be notified.")) {
+                      onCancel();
+                    }
+                  }}
+                  className="px-3 py-1 rounded text-xs font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           )}
         </div>
         <PhaseIndicator phase={meeting.phase} status={meeting.status} phases={meeting.phases} />
+        {meeting.phaseDescription && meeting.status === "active" && (
+          <p className="text-xs text-zinc-400 bg-zinc-900 rounded px-3 py-1.5 italic">
+            {meeting.phaseDescription}
+          </p>
+        )}
         {meeting.agenda && (
           <p className="text-xs text-zinc-500">
             {meeting.agenda.length > 200 ? meeting.agenda.slice(0, 200) + "..." : meeting.agenda}
@@ -149,20 +189,134 @@ export function MeetingRoom({
           );
         })}
 
-        {showThinking && <ThinkingIndicator />}
+        {showThinking && <ThinkingIndicator agentId={
+          // Show the next expected speaker (exclude last speaker + the observing CEO)
+          meeting.participants.find((p) => p !== lastMsgAgentId && p !== "ceo")
+        } />}
 
         {meeting.status === "completed" && (
-          <div className="text-center py-4 border-t border-zinc-800 mt-4 animate-message-in">
-            <span className="text-emerald-400 font-bold text-sm">Meeting Completed</span>
+          <div className="border-t border-zinc-800 mt-4 animate-message-in">
+            <div className="text-center py-3">
+              <span className="text-emerald-400 font-bold text-sm">Meeting Completed</span>
+            </div>
+            {meeting.summary && (
+              <div className="mx-4 mb-4 p-4 bg-zinc-900 border border-zinc-800 rounded-lg">
+                <h3 className="text-xs font-medium text-zinc-500 uppercase mb-2">Summary</h3>
+                <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                  {meeting.summary}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Proposals & votes (DECIDE phase) */}
-      {meeting.proposals.length > 0 && <VotePanel proposals={meeting.proposals} />}
+      {meeting.proposals.length > 0 && (
+        <VotePanel
+          proposals={meeting.proposals}
+          onVote={onVote && meeting.status === "active" ? onVote : undefined}
+        />
+      )}
+
+      {/* Proposal input */}
+      {hasProposals && meeting.status === "active" && onPropose && (
+        <div className="border-t border-zinc-800 p-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = proposalInput.trim();
+              if (trimmed) {
+                onPropose(trimmed);
+                setProposalInput("");
+              }
+            }}
+            className="flex gap-2"
+          >
+            <input
+              value={proposalInput}
+              onChange={(e) => setProposalInput(e.target.value)}
+              placeholder="Submit a proposal..."
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={!proposalInput.trim()}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                proposalInput.trim()
+                  ? "bg-violet-600 hover:bg-violet-500 text-white"
+                  : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+              }`}
+            >
+              Propose
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Action items (ASSIGN phase) */}
-      {meeting.actionItems.length > 0 && <ActionItems items={meeting.actionItems} />}
+      {meeting.actionItems.length > 0 && (
+        <ActionItems
+          items={meeting.actionItems}
+          onAcknowledge={onAcknowledge && meeting.status === "active" ? onAcknowledge : undefined}
+        />
+      )}
+
+      {/* Assignment input */}
+      {hasAssignments && meeting.status === "active" && onAssign && (
+        <div className="border-t border-zinc-800 p-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (taskInput.trim() && assigneeInput) {
+                onAssign(taskInput.trim(), assigneeInput, deadlineInput || undefined);
+                setTaskInput("");
+                setAssigneeInput("");
+                setDeadlineInput("");
+              }
+            }}
+            className="space-y-2"
+          >
+            <div className="flex gap-2">
+              <input
+                value={taskInput}
+                onChange={(e) => setTaskInput(e.target.value)}
+                placeholder="Task description..."
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={assigneeInput}
+                onChange={(e) => setAssigneeInput(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Assign to...</option>
+                {(participants ?? meeting.participants).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={deadlineInput}
+                onChange={(e) => setDeadlineInput(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={!taskInput.trim() || !assigneeInput}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  taskInput.trim() && assigneeInput
+                    ? "bg-amber-600 hover:bg-amber-500 text-white"
+                    : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+                }`}
+              >
+                Assign
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Chat input */}
       {meeting.status === "active" && (
