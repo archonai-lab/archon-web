@@ -2,16 +2,21 @@ import { useState } from "react";
 import type { AgentCard } from "../lib/types";
 import { AgentList } from "./AgentList";
 
+type SummaryMode = "off" | "structured" | "llm";
+
 export function MeetingLauncher({
   agents,
   onStart,
+  llmAvailable,
 }: {
   agents: AgentCard[];
-  onStart: (title: string, invitees: string[], agenda: string, methodology?: string) => void;
+  onStart: (title: string, invitees: string[], agenda: string, methodology?: string, summaryMode?: SummaryMode) => void;
+  llmAvailable?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [agenda, setAgenda] = useState("");
   const [methodology, setMethodology] = useState("");
+  const [summaryMode, setSummaryMode] = useState<SummaryMode>("off");
   const [selected, setSelected] = useState(new Set<string>());
 
   const toggleAgent = (id: string) => {
@@ -69,6 +74,41 @@ export function MeetingLauncher({
           </p>
         </div>
 
+        {/* Summary mode */}
+        <div>
+          <label className="block text-sm font-medium text-zinc-400 mb-2">
+            Post-Meeting Summary
+          </label>
+          <div className="flex gap-2">
+            {(["off", "structured", "llm"] as const).map((opt) => {
+              const disabled = opt === "llm" && !llmAvailable;
+              return (
+                <button
+                  key={opt}
+                  onClick={() => !disabled && setSummaryMode(opt)}
+                  disabled={disabled}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    summaryMode === opt
+                      ? "bg-blue-600 text-white"
+                      : disabled
+                      ? "bg-zinc-800/50 text-zinc-700 cursor-not-allowed"
+                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  }`}
+                >
+                  {opt === "off" ? "None" : opt === "structured" ? "Structured" : "AI Summary"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-zinc-600 mt-1">
+            {summaryMode === "off" && "No summary will be generated."}
+            {summaryMode === "structured" && "Markdown summary extracted from meeting data."}
+            {summaryMode === "llm" && (llmAvailable
+              ? "AI-powered natural language summary after meeting ends."
+              : "Configure LLM API key in Settings first.")}
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-zinc-400 mb-2">
             Invite Agents ({selected.size} selected)
@@ -86,10 +126,12 @@ export function MeetingLauncher({
                 [...selected],
                 agenda.trim(),
                 methodology.trim() || undefined,
+                summaryMode,
               );
               setTitle("");
               setAgenda("");
               setMethodology("");
+              setSummaryMode("off");
               setSelected(new Set());
             }
           }}

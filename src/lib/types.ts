@@ -4,7 +4,7 @@
 export type Phase = string;
 export type MeetingStatus = "active" | "completed" | "cancelled";
 export type RelevanceLevel = "must_speak" | "could_add" | "pass";
-export type AgentStatus = "online" | "offline" | "busy";
+export type AgentStatus = "active" | "deactivated";
 export type VoteChoice = "approve" | "reject" | "abstain";
 
 /** Default phase order for the built-in "general" methodology. */
@@ -18,6 +18,74 @@ export interface AuthMessage {
   token: string;
 }
 
+export interface AgentCreateMessage {
+  type: "agent.create";
+  name: string;
+  displayName: string;
+  departments?: Array<{ departmentId: string; roleId: string }>;
+  role?: string;
+  modelConfig?: Record<string, unknown>;
+}
+
+export interface AgentUpdateMessage {
+  type: "agent.update";
+  agentId: string;
+  displayName?: string;
+  departments?: Array<{ departmentId: string; roleId: string }>;
+  modelConfig?: Record<string, unknown>;
+}
+
+export interface AgentDeleteMessage {
+  type: "agent.delete";
+  agentId: string;
+}
+
+export interface DepartmentListMessage {
+  type: "department.list";
+}
+
+export interface DepartmentCreateMessage {
+  type: "department.create";
+  name: string;
+  description?: string;
+}
+
+export interface DepartmentUpdateMessage {
+  type: "department.update";
+  departmentId: string;
+  name?: string;
+  description?: string;
+}
+
+export interface DepartmentDeleteMessage {
+  type: "department.delete";
+  departmentId: string;
+}
+
+export interface RoleListMessage {
+  type: "role.list";
+  departmentId?: string;
+}
+
+export interface RoleCreateMessage {
+  type: "role.create";
+  departmentId: string;
+  name: string;
+  permissions?: string[];
+}
+
+export interface RoleUpdateMessage {
+  type: "role.update";
+  roleId: string;
+  name?: string;
+  permissions?: string[];
+}
+
+export interface RoleDeleteMessage {
+  type: "role.delete";
+  roleId: string;
+}
+
 export interface MeetingCreateMessage {
   type: "meeting.create";
   title: string;
@@ -25,6 +93,7 @@ export interface MeetingCreateMessage {
   tokenBudget?: number;
   agenda?: string;
   methodology?: string;
+  summaryMode?: "off" | "structured" | "llm";
 }
 
 export interface MeetingJoinMessage {
@@ -65,6 +134,24 @@ export interface MeetingAssignMessage {
   deadline?: string;
 }
 
+export interface MeetingAcknowledgeMessage {
+  type: "meeting.acknowledge";
+  meetingId: string;
+  taskIndex: number;
+}
+
+export interface MeetingHistoryRequestMessage {
+  type: "meeting.history";
+  status?: MeetingStatus;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface MeetingTranscriptRequestMessage {
+  type: "meeting.transcript";
+  meetingId: string;
+}
+
 export interface PingMessage {
   type: "ping";
 }
@@ -75,6 +162,14 @@ export interface AuthOkMessage {
   type: "auth.ok";
   agentCard: unknown;
   pendingInvites?: string[];
+  activeMeetings?: Array<{
+    meetingId: string;
+    title: string;
+    phase: string;
+    initiator: string;
+    participants?: string[];
+    budgetRemaining?: number;
+  }>;
 }
 
 export interface AuthErrorMessage {
@@ -149,6 +244,7 @@ export interface MeetingCompletedMessage {
   meetingId: string;
   decisions: unknown[];
   actionItems: unknown[];
+  summary?: string;
 }
 
 export interface MeetingCancelledMessage {
@@ -162,6 +258,141 @@ export interface DirectoryResultMessage {
   agents: AgentCard[];
 }
 
+export interface DirectoryUpdatedMessage {
+  type: "directory.updated";
+}
+
+export interface AgentCreatedMessage {
+  type: "agent.created";
+  agentId: string;
+  displayName: string;
+}
+
+export interface AgentUpdatedMessage {
+  type: "agent.updated";
+  agentId: string;
+}
+
+export interface AgentDeletedMessage {
+  type: "agent.deleted";
+  agentId: string;
+}
+
+export interface DepartmentResultMessage {
+  type: "department.result";
+  departments: Department[];
+}
+
+export interface DepartmentCreatedMessage {
+  type: "department.created";
+  departmentId: string;
+  name: string;
+}
+
+export interface DepartmentUpdatedMessage {
+  type: "department.updated";
+  departmentId: string;
+}
+
+export interface DepartmentDeletedMessage {
+  type: "department.deleted";
+  departmentId: string;
+}
+
+export interface RoleResultMessage {
+  type: "role.result";
+  roles: Role[];
+}
+
+export interface RoleCreatedMessage {
+  type: "role.created";
+  roleId: string;
+  name: string;
+  departmentId: string;
+}
+
+export interface RoleUpdatedMessage {
+  type: "role.updated";
+  roleId: string;
+}
+
+export interface RoleDeletedMessage {
+  type: "role.deleted";
+  roleId: string;
+}
+
+export interface MeetingHistoryResultMessage {
+  type: "meeting.history.result";
+  meetings: MeetingSummary[];
+}
+
+export interface MeetingTranscriptResultMessage {
+  type: "meeting.transcript.result";
+  meeting: {
+    id: string;
+    title: string;
+    status: string;
+    methodology: string;
+    initiatorId: string;
+    agenda: unknown;
+    decisions: unknown[];
+    actionItems: unknown[];
+    summary: string | null;
+    createdAt: string;
+    completedAt: string | null;
+  };
+  messages: TranscriptEntry[];
+  participants: string[];
+}
+
+export interface MeetingActiveListResultMessage {
+  type: "meeting.active_list.result";
+  meetings: Array<{
+    meetingId: string;
+    title: string;
+    phase: string;
+    initiator: string;
+    participants: string[];
+    status: string;
+  }>;
+}
+
+export interface AgentsSpawnedMessage {
+  type: "agents.spawned";
+  meetingId: string;
+  agentIds: string[];
+}
+
+export interface AgentsSpawnFailedMessage {
+  type: "agents.spawn_failed";
+  meetingId: string;
+  failures: Array<{ agentId: string; reason: string }>;
+}
+
+export interface AgentProcessErrorMessage {
+  type: "agent.process_error";
+  agentId: string;
+  reason: string;
+}
+
+export interface AgentsDespawnedMessage {
+  type: "agents.despawned";
+  meetingId: string;
+  agentIds: string[];
+}
+
+export interface ConfigResultMessage {
+  type: "config.result";
+  config: HubConfig;
+}
+
+export interface HubConfig {
+  llmAvailable: boolean;
+  llmApiKey: string;
+  llmBaseUrl: string;
+  llmModel: string;
+}
+
 export interface ErrorMessage {
   type: "error";
   code: string;
@@ -173,7 +404,50 @@ export interface AgentCard {
   displayName: string;
   description?: string;
   status: AgentStatus;
+  activity?: string; // "idle", "connected", "spawning", "in_meeting:<title>"
   departments?: Array<{ id: string; name: string; role: { name: string } }>;
+  model?: { provider: string; backend: string } | null;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface Role {
+  id: string;
+  departmentId: string;
+  name: string;
+  permissions: string[];
+  createdAt: string;
+}
+
+export interface MeetingSummary {
+  id: string;
+  title: string;
+  status: string;
+  phase: string;
+  methodology: string;
+  initiatorId: string;
+  tokensUsed: number;
+  tokenBudget: number;
+  createdAt: string;
+  completedAt: string | null;
+  participantCount: number;
+  messageCount: number;
+}
+
+export interface TranscriptEntry {
+  id: number;
+  agentId: string;
+  displayName: string;
+  phase: string;
+  content: string;
+  tokenCount: number;
+  relevance: string | null;
+  createdAt: string;
 }
 
 // Union of all hub → client messages
@@ -190,6 +464,26 @@ export type HubMessage =
   | MeetingCompletedMessage
   | MeetingCancelledMessage
   | DirectoryResultMessage
+  | DirectoryUpdatedMessage
+  | AgentCreatedMessage
+  | AgentUpdatedMessage
+  | AgentDeletedMessage
+  | DepartmentResultMessage
+  | DepartmentCreatedMessage
+  | DepartmentUpdatedMessage
+  | DepartmentDeletedMessage
+  | RoleResultMessage
+  | RoleCreatedMessage
+  | RoleUpdatedMessage
+  | RoleDeletedMessage
+  | MeetingActiveListResultMessage
+  | MeetingHistoryResultMessage
+  | MeetingTranscriptResultMessage
+  | AgentsSpawnedMessage
+  | AgentsSpawnFailedMessage
+  | AgentProcessErrorMessage
+  | AgentsDespawnedMessage
+  | ConfigResultMessage
   | ErrorMessage
   | { type: "pong" };
 
@@ -244,6 +538,8 @@ export interface MeetingState {
   capabilities: string[];
   /** Current phase description (updated on each phase_change). */
   phaseDescription?: string;
+  /** Generated summary after meeting completion. */
+  summary?: string;
 }
 
 // Toast notification

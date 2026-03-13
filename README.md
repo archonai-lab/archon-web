@@ -1,73 +1,126 @@
-# React + TypeScript + Vite
+# Archon Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Web UI for the [Archon](https://github.com/leviathanst/archon) platform — observe and control AI agent meetings in real-time.
 
-Currently, two official plugins are available:
+## Quick Start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Requires the Archon hub running separately:
+```bash
+cd ~/archon
+docker compose up -d       # Start Postgres
+npm run db:seed            # Seed agents + departments
+npx tsx src/index.ts       # Start hub on ws://localhost:9500
 ```
+
+## Tech Stack
+
+- **React 19** + **TypeScript** (strict mode)
+- **Tailwind CSS v4** — dark theme only, no component libraries
+- **Vite 7** — dev server + build
+- **WebSocket** — real-time connection to Archon hub
+- **vitest** + **React Testing Library** — component tests
+
+## Commands
+
+```bash
+npm run dev            # Vite dev server with HMR
+npm run build          # TypeScript check + production build
+npm run lint           # ESLint
+npm test               # Run component tests (vitest)
+npm run test:watch     # Run tests in watch mode
+npm run review         # Code review via Claude agent
+npm run review:meeting # Code review via Archon meeting (multi-agent)
+```
+
+## Project Structure
+
+```
+src/
+  App.tsx              # Main app + useHub() state manager
+  lib/
+    ws.ts              # HubConnection — WebSocket client
+    types.ts           # Protocol types (mirrors hub schemas)
+  components/
+    MeetingLauncher    # Create new meetings
+    MeetingRoom        # Live meeting chat stream
+    MeetingTranscript  # Read-only transcript viewer
+    MeetingHistory     # Past meetings browser
+    PhaseIndicator     # Phase progress bar
+    HubSettings        # LLM configuration
+    AgentDetailPanel   # Agent info + edit
+    AgentCreateForm    # Create new agents
+tests/                 # Component tests (vitest + RTL)
+e2e/                   # Playwright E2E tests
+agents/                # Review agent identities (SOUL.md + IDENTITY.md)
+scripts/
+  review.sh            # Single-agent code review pipeline
+  review-meeting.sh    # Multi-agent Archon review meeting
+```
+
+## Review Pipeline
+
+This project uses AI-powered code review as part of the development workflow. Two options:
+
+### Single-agent review (fast)
+
+```bash
+npm run review            # Review uncommitted changes
+npm run review:staged     # Review staged changes only
+npm run review:branch     # Review full branch vs main
+```
+
+Runs tests + type check, then sends the diff to a Claude reviewer agent. Takes ~30 seconds.
+
+### Archon review meeting (thorough)
+
+```bash
+npm run review:meeting
+```
+
+Dogfoods Archon itself — creates a real meeting where specialized review agents discuss your changes:
+
+- **code-reviewer** — Focuses on correctness, type safety, security, test coverage
+- **ux-reviewer** — Focuses on accessibility, loading/error states, visual consistency
+
+The agents join a meeting with your diff as the agenda, discuss issues from their perspectives, and produce action items. Requires the hub running.
+
+See [AGENTS.md](./AGENTS.md) for details on review agents, how to add new ones, and how to customize them.
+
+## Testing
+
+```bash
+npm test                  # Run all component tests
+npm run test:watch        # Watch mode
+npx vitest run tests/meeting-room.test.tsx  # Single file
+```
+
+Tests use vitest + React Testing Library with jsdom. Test files live in `tests/` and cover:
+- MeetingLauncher — summary mode, form validation, onStart callback
+- MeetingRoom — messages, controls, summary display, proposals, assignments
+- MeetingTranscript — phase grouping, summary, decisions, action items
+- HubSettings — LLM config, save/close, status display
+- PhaseIndicator — phase styling, active/past/future states
+
+## Architecture
+
+The client connects to the Archon hub via WebSocket. All data flows through the real-time connection — no REST, no polling.
+
+```
+Hub (ws://localhost:9500)
+  ↕ WebSocket (JSON messages)
+HubConnection (src/lib/ws.ts)
+  ↕ onMessage callbacks
+useHub() hook (src/App.tsx)
+  ↕ React state
+Components
+```
+
+Key flows:
+- **Auth**: `auth` → `auth.ok` → `directory.list` → `directory.result`
+- **Meeting**: `meeting.create` → `meeting.invite` → `meeting.phase_change` → `meeting.message` stream → `meeting.completed`
+- **Config**: `config.get` → `config.result` / `config.set` → `config.result`

@@ -1,4 +1,4 @@
-import type { HubMessage, MeetingState, ChatMessage, Proposal } from "./types";
+import type { HubMessage, MeetingState, ChatMessage, Proposal, VoteChoice } from "./types";
 
 type Listener = (msg: HubMessage) => void;
 
@@ -33,38 +33,44 @@ export class HubConnection {
   }
 
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
 
+    let ws: WebSocket;
     try {
-      this.ws = new WebSocket(this._url);
+      ws = new WebSocket(this._url);
     } catch {
       this.scheduleReconnect();
       return;
     }
 
-    this.ws.onopen = () => {
-      this.ws!.send(JSON.stringify({ type: "auth", agentId: this._agentId, token: this._agentId }));
+    this.ws = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "auth", agentId: this._agentId, token: this._agentId }));
       this.pingTimer = setInterval(() => {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: "ping" }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
         }
       }, 30_000);
     };
 
-    this.ws.onmessage = (event) => {
+    ws.onmessage = (event) => {
       const msg = JSON.parse(event.data as string) as HubMessage;
       this.handleMessage(msg);
       for (const fn of this.listeners) fn(msg);
     };
 
-    this.ws.onclose = () => {
+    ws.onclose = () => {
+      // Ignore close events from stale sockets (e.g. after reconnect())
+      if (this.ws !== ws) return;
+
       this._connected = false;
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.scheduleReconnect();
       this.notify({ type: "auth.error", code: "DISCONNECTED", message: "Connection lost" });
     };
 
-    this.ws.onerror = () => {
+    ws.onerror = () => {
       // onclose will fire after this
     };
   }
@@ -72,9 +78,10 @@ export class HubConnection {
   disconnect(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
-    this.ws?.close();
-    this.ws = null;
+    const ws = this.ws;
+    this.ws = null;         // null out first so onclose sees it as stale
     this._connected = false;
+    ws?.close();
   }
 
   send(msg: unknown): void {
@@ -88,7 +95,7 @@ export class HubConnection {
     return () => this.listeners.delete(fn);
   }
 
-  createMeeting(title: string, invitees: string[], agenda?: string, tokenBudget?: number, methodology?: string): void {
+  createMeeting(title: string, invitees: string[], agenda?: string, tokenBudget?: number, methodology?: string, summaryMode?: "off" | "structured" | "llm"): void {
     this.send({
       type: "meeting.create",
       title,
@@ -96,6 +103,7 @@ export class HubConnection {
       agenda,
       tokenBudget,
       ...(methodology ? { methodology } : {}),
+      ...(summaryMode && summaryMode !== "off" ? { summaryMode } : {}),
     });
   }
 
@@ -111,6 +119,118 @@ export class HubConnection {
     this.send({ type: "meeting.advance", meetingId });
   }
 
+  cancelMeeting(meetingId: string, reason?: string): void {
+    this.send({ type: "meeting.cancel", meetingId, reason });
+  }
+
+  // --- Agent CRUD ---
+
+  createAgent(name: string, displayName: string, opts?: {
+    departments?: Array<{ departmentId: string; roleId: string }>;
+    role?: string;
+    modelConfig?: Record<string, unknown>;
+  }): void {
+    this.send({ type: "agent.create", name, displayName, ...opts });
+  }
+
+  updateAgent(agentId: string, opts: {
+    displayName?: string;
+    departments?: Array<{ departmentId: string; roleId: string }>;
+    modelConfig?: Record<string, unknown>;
+  }): void {
+    this.send({ type: "agent.update", agentId, ...opts });
+  }
+
+  deleteAgent(agentId: string): void {
+    this.send({ type: "agent.delete", agentId });
+  }
+
+  reactivateAgent(agentId: string): void {
+    this.send({ type: "agent.reactivate", agentId });
+  }
+
+  // --- Department CRUD ---
+
+  listDepartments(): void {
+    this.send({ type: "department.list" });
+  }
+
+  createDepartment(name: string, description?: string): void {
+    this.send({ type: "department.create", name, description });
+  }
+
+  updateDepartment(departmentId: string, opts: { name?: string; description?: string }): void {
+    this.send({ type: "department.update", departmentId, ...opts });
+  }
+
+  deleteDepartment(departmentId: string): void {
+    this.send({ type: "department.delete", departmentId });
+  }
+
+  // --- Role CRUD ---
+
+  listRoles(departmentId?: string): void {
+    this.send({ type: "role.list", departmentId });
+  }
+
+  createRole(departmentId: string, name: string, permissions?: string[]): void {
+    this.send({ type: "role.create", departmentId, name, permissions });
+  }
+
+  updateRole(roleId: string, opts: { name?: string; permissions?: string[] }): void {
+    this.send({ type: "role.update", roleId, ...opts });
+  }
+
+  deleteRole(roleId: string): void {
+    this.send({ type: "role.delete", roleId });
+  }
+
+  // --- Meeting participation ---
+
+  proposeInMeeting(meetingId: string, proposal: string): void {
+    this.send({ type: "meeting.propose", meetingId, proposal });
+  }
+
+  voteInMeeting(meetingId: string, proposalIndex: number, vote: VoteChoice, reason?: string): void {
+    this.send({ type: "meeting.vote", meetingId, proposalIndex, vote, reason });
+  }
+
+  assignInMeeting(meetingId: string, task: string, assigneeId: string, deadline?: string): void {
+    this.send({ type: "meeting.assign", meetingId, task, assigneeId, deadline });
+  }
+
+  acknowledgeInMeeting(meetingId: string, taskIndex: number): void {
+    this.send({ type: "meeting.acknowledge", meetingId, taskIndex });
+  }
+
+  // --- Hub config ---
+
+  getConfig(): void {
+    this.send({ type: "config.get" });
+  }
+
+  setConfig(key: string, value: unknown): void {
+    this.send({ type: "config.set", key, value });
+  }
+
+  // --- Active meetings ---
+
+  listActiveMeetings(): void {
+    this.send({ type: "meeting.active_list" });
+  }
+
+  // --- Meeting history ---
+
+  listMeetingHistory(opts?: { status?: string; cursor?: string; limit?: number }): void {
+    this.send({ type: "meeting.history", ...opts });
+  }
+
+  getMeetingTranscript(meetingId: string): void {
+    this.send({ type: "meeting.transcript", meetingId });
+  }
+
+  // --- Directory ---
+
   listAgents(): void {
     this.send({ type: "directory.list" });
   }
@@ -119,7 +239,36 @@ export class HubConnection {
     switch (msg.type) {
       case "auth.ok":
         this._connected = true;
-        // Request agent list on connect
+        // Request agent list, departments, and config on connect
+        this.listAgents();
+        this.listDepartments();
+        this.listRoles();
+        this.getConfig();
+        // Restore active meetings on reconnect
+        if (msg.activeMeetings) {
+          for (const m of msg.activeMeetings) {
+            if (!this.meetings.has(m.meetingId)) {
+              this.meetings.set(m.meetingId, {
+                id: m.meetingId,
+                title: m.title,
+                initiator: m.initiator,
+                phase: m.phase,
+                status: "active",
+                budgetRemaining: m.budgetRemaining ?? 0,
+                messages: [],
+                participants: m.participants ?? [],
+                proposals: [],
+                actionItems: [],
+                phases: [m.phase],
+                capabilities: [],
+              });
+            }
+          }
+        }
+        break;
+
+      case "directory.updated":
+        // Refresh agent list when directory changes
         this.listAgents();
         break;
 
@@ -242,7 +391,10 @@ export class HubConnection {
 
       case "meeting.completed": {
         const m = this.meetings.get(msg.meetingId);
-        if (m) m.status = "completed";
+        if (m) {
+          m.status = "completed";
+          if (msg.summary) m.summary = msg.summary;
+        }
         break;
       }
 

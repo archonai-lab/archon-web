@@ -1,6 +1,12 @@
 import type { ActionItem } from "../lib/types";
 
-export function ActionItems({ items }: { items: ActionItem[] }) {
+export function ActionItems({
+  items,
+  onAcknowledge,
+}: {
+  items: ActionItem[];
+  onAcknowledge?: (taskIndex: number) => void;
+}) {
   if (items.length === 0) return null;
 
   return (
@@ -27,6 +33,14 @@ export function ActionItems({ items }: { items: ActionItem[] }) {
                     <span className="text-zinc-700">·</span>
                     <span className="text-amber-400">{item.deadline}</span>
                   </>
+                )}
+                {onAcknowledge && (
+                  <button
+                    onClick={() => onAcknowledge(item.taskIndex)}
+                    className="ml-2 px-2 py-0.5 rounded text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 transition-colors"
+                  >
+                    Acknowledge
+                  </button>
                 )}
               </div>
             </div>
