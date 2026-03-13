@@ -204,7 +204,7 @@ function App() {
   const {
     connected, agents, departments, roles, meetings,
     activeMeetingId, setActiveMeetingId,
-    activeMeetingsList, setActiveMeetingsList,
+    activeMeetingsList,
     hubConfig,
     toasts, dismissToast, connectAs,
     meetingHistory, transcript, setTranscript,
