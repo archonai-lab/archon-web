@@ -6,7 +6,13 @@ const VOTE_STYLES: Record<VoteChoice, { bg: string; text: string; label: string 
   abstain: { bg: "bg-zinc-500/20", text: "text-zinc-400", label: "Abstain" },
 };
 
-export function VotePanel({ proposals }: { proposals: Proposal[] }) {
+export function VotePanel({
+  proposals,
+  onVote,
+}: {
+  proposals: Proposal[];
+  onVote?: (proposalIndex: number, vote: VoteChoice, reason?: string) => void;
+}) {
   if (proposals.length === 0) return null;
 
   return (
@@ -71,6 +77,30 @@ export function VotePanel({ proposals }: { proposals: Proposal[] }) {
                     </span>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Vote buttons */}
+            {onVote && (
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => onVote(i, "approve")}
+                  className="px-3 py-1 rounded text-xs font-medium bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 transition-colors"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => onVote(i, "reject")}
+                  className="px-3 py-1 rounded text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => onVote(i, "abstain")}
+                  className="px-3 py-1 rounded text-xs font-medium bg-zinc-500/20 hover:bg-zinc-500/30 text-zinc-400 transition-colors"
+                >
+                  Abstain
+                </button>
               </div>
             )}
           </div>
