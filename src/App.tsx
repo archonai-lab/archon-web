@@ -442,6 +442,8 @@ function App() {
           onAssign={(task, assigneeId, deadline) => hub.assignInMeeting(activeMeeting.id, task, assigneeId, deadline)}
           onAcknowledge={(idx) => hub.acknowledgeInMeeting(activeMeeting.id, idx)}
           onCancel={() => hub.cancelMeeting(activeMeeting.id)}
+          onRelevance={(level) => hub.sendRelevance(activeMeeting.id, level)}
+          onApprove={() => hub.approveMeeting(activeMeeting.id)}
           participants={activeMeeting.participants}
         />
       );

@@ -55,6 +55,8 @@ export function MeetingRoom({
   onAssign,
   onAcknowledge,
   onCancel,
+  onRelevance,
+  onApprove,
   participants,
 }: {
   meeting: MeetingState;
@@ -65,6 +67,8 @@ export function MeetingRoom({
   onAssign?: (task: string, assigneeId: string, deadline?: string) => void;
   onAcknowledge?: (taskIndex: number) => void;
   onCancel?: () => void;
+  onRelevance?: (level: "must_speak" | "could_add" | "pass") => void;
+  onApprove?: () => void;
   participants?: string[];
 }) {
   const [input, setInput] = useState("");
@@ -315,6 +319,72 @@ export function MeetingRoom({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Relevance check prompt */}
+      {meeting.relevanceCheck && onRelevance && (
+        <div className="border-t border-zinc-800 p-3 bg-blue-500/5 animate-message-in">
+          <div className="text-xs text-zinc-400 mb-2">
+            <span className="font-medium text-blue-400">{meeting.relevanceCheck.lastMessage.agentId}</span>
+            {" said: \""}
+            {meeting.relevanceCheck.lastMessage.content.slice(0, 100)}
+            {meeting.relevanceCheck.lastMessage.content.length > 100 ? "..." : ""}
+            {'"'}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-500 mr-1">Do you want to respond?</span>
+            <button
+              onClick={() => onRelevance("must_speak")}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+            >
+              Must Speak
+            </button>
+            <button
+              onClick={() => onRelevance("could_add")}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+            >
+              Could Add
+            </button>
+            <button
+              onClick={() => onRelevance("pass")}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
+            >
+              Pass
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Your turn indicator */}
+      {meeting.isMyTurn && (
+        <div className="border-t border-zinc-800 p-3 bg-amber-500/10 animate-message-in">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-sm font-medium text-amber-400">Your turn to speak</span>
+            <span className="text-xs text-zinc-500">Type your message below</span>
+          </div>
+        </div>
+      )}
+
+      {/* Phase approval */}
+      {meeting.awaitingApproval && onApprove && (
+        <div className="border-t border-zinc-800 p-3 bg-violet-500/10 animate-message-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm text-zinc-300">
+                Phase <span className="font-medium text-violet-400">{meeting.awaitingApproval.currentPhase.toUpperCase()}</span>
+                {" complete → "}
+                <span className="font-medium text-violet-400">{meeting.awaitingApproval.nextPhase.toUpperCase()}</span>
+              </span>
+            </div>
+            <button
+              onClick={onApprove}
+              className="px-4 py-1.5 rounded text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+            >
+              Approve
+            </button>
+          </div>
         </div>
       )}
 
