@@ -333,22 +333,16 @@ export function MeetingRoom({
             {'"'}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500 mr-1">Do you want to respond?</span>
+            <span className="text-xs text-zinc-500 mr-1">Want to respond?</span>
             <button
               onClick={() => onRelevance("must_speak")}
-              className="px-3 py-1.5 rounded text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              className="px-4 py-1.5 rounded text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
             >
-              Must Speak
-            </button>
-            <button
-              onClick={() => onRelevance("could_add")}
-              className="px-3 py-1.5 rounded text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-            >
-              Could Add
+              Speak
             </button>
             <button
               onClick={() => onRelevance("pass")}
-              className="px-3 py-1.5 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
+              className="px-4 py-1.5 rounded text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 transition-colors"
             >
               Pass
             </button>
