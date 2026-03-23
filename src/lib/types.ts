@@ -393,6 +393,28 @@ export interface HubConfig {
   llmModel: string;
 }
 
+export interface MeetingRelevanceCheckMessage {
+  type: "meeting.relevance_check";
+  meetingId: string;
+  lastMessage: { agentId: string; content: string };
+  phase: string;
+  contextSummary: string;
+}
+
+export interface MeetingYourTurnMessage {
+  type: "meeting.your_turn";
+  meetingId: string;
+  phase: string;
+  budgetRemaining: number;
+}
+
+export interface MeetingAwaitingApprovalMessage {
+  type: "meeting.awaiting_approval";
+  meetingId: string;
+  currentPhase: string;
+  nextPhase: string;
+}
+
 export interface ErrorMessage {
   type: "error";
   code: string;
@@ -483,6 +505,9 @@ export type HubMessage =
   | AgentsSpawnFailedMessage
   | AgentProcessErrorMessage
   | AgentsDespawnedMessage
+  | MeetingRelevanceCheckMessage
+  | MeetingYourTurnMessage
+  | MeetingAwaitingApprovalMessage
   | ConfigResultMessage
   | ErrorMessage
   | { type: "pong" };
@@ -540,6 +565,12 @@ export interface MeetingState {
   phaseDescription?: string;
   /** Generated summary after meeting completion. */
   summary?: string;
+  /** Active relevance check awaiting human response. */
+  relevanceCheck?: { lastMessage: { agentId: string; content: string }; phase: string };
+  /** True when it's the human's turn to speak. */
+  isMyTurn?: boolean;
+  /** Phase transition awaiting approval. */
+  awaitingApproval?: { currentPhase: string; nextPhase: string };
 }
 
 // Toast notification

@@ -1,4 +1,4 @@
-import type { HubMessage, MeetingState, ChatMessage, Proposal, VoteChoice } from "./types";
+import type { HubMessage, MeetingState, ChatMessage, Proposal, VoteChoice, RelevanceLevel } from "./types";
 
 type Listener = (msg: HubMessage) => void;
 
@@ -113,10 +113,16 @@ export class HubConnection {
 
   speakInMeeting(meetingId: string, content: string): void {
     this.send({ type: "meeting.speak", meetingId, content });
+    // Clear turn state after speaking
+    const m = this.meetings.get(meetingId);
+    if (m) m.isMyTurn = false;
   }
 
   advanceMeeting(meetingId: string): void {
     this.send({ type: "meeting.advance", meetingId });
+    // Clear approval state
+    const m = this.meetings.get(meetingId);
+    if (m) m.awaitingApproval = undefined;
   }
 
   cancelMeeting(meetingId: string, reason?: string): void {
@@ -201,6 +207,21 @@ export class HubConnection {
 
   acknowledgeInMeeting(meetingId: string, taskIndex: number): void {
     this.send({ type: "meeting.acknowledge", meetingId, taskIndex });
+  }
+
+  sendRelevance(meetingId: string, level: RelevanceLevel): void {
+    this.send({ type: "meeting.relevance", meetingId, level });
+    // Clear relevance check state
+    const m = this.meetings.get(meetingId);
+    if (m) m.relevanceCheck = undefined;
+  }
+
+  approveMeeting(meetingId: string): void {
+    this.send({ type: "meeting.approve", meetingId });
+  }
+
+  leaveMeeting(meetingId: string): void {
+    this.send({ type: "meeting.leave", meetingId });
   }
 
   // --- Hub config ---
@@ -401,6 +422,41 @@ export class HubConnection {
       case "meeting.cancelled": {
         const m = this.meetings.get(msg.meetingId);
         if (m) m.status = "cancelled";
+        break;
+      }
+
+      case "meeting.relevance_check": {
+        const m = this.meetings.get(msg.meetingId);
+        if (m) {
+          m.relevanceCheck = {
+            lastMessage: msg.lastMessage,
+            phase: msg.phase,
+          };
+          // Clear previous turn state
+          m.isMyTurn = false;
+        }
+        break;
+      }
+
+      case "meeting.your_turn": {
+        const m = this.meetings.get(msg.meetingId);
+        if (m) {
+          m.isMyTurn = true;
+          m.budgetRemaining = msg.budgetRemaining;
+          // Clear relevance check (we already responded)
+          m.relevanceCheck = undefined;
+        }
+        break;
+      }
+
+      case "meeting.awaiting_approval": {
+        const m = this.meetings.get(msg.meetingId);
+        if (m) {
+          m.awaitingApproval = {
+            currentPhase: msg.currentPhase,
+            nextPhase: msg.nextPhase,
+          };
+        }
         break;
       }
     }
