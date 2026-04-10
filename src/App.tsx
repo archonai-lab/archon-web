@@ -151,6 +151,18 @@ function useHub() {
           setMeetings(new Map(hub.meetings));
           addToast(`Meeting cancelled: ${msg.reason}`, "warning");
           break;
+        case "meeting.relevance_check":
+          setMeetings(new Map(hub.meetings));
+          addToast(`Relevance check: do you want to respond?`, "info");
+          break;
+        case "meeting.your_turn":
+          setMeetings(new Map(hub.meetings));
+          addToast("Your turn to speak!", "info");
+          break;
+        case "meeting.awaiting_approval":
+          setMeetings(new Map(hub.meetings));
+          addToast(`Phase "${msg.currentPhase}" complete — approve transition?`, "info");
+          break;
         case "config.result":
           setHubConfig(msg.config);
           break;
@@ -430,6 +442,8 @@ function App() {
           onAssign={(task, assigneeId, deadline) => hub.assignInMeeting(activeMeeting.id, task, assigneeId, deadline)}
           onAcknowledge={(idx) => hub.acknowledgeInMeeting(activeMeeting.id, idx)}
           onCancel={() => hub.cancelMeeting(activeMeeting.id)}
+          onRelevance={(level) => hub.sendRelevance(activeMeeting.id, level)}
+          onApprove={() => hub.approveMeeting(activeMeeting.id)}
           participants={activeMeeting.participants}
         />
       );
