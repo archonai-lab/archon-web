@@ -250,6 +250,10 @@ export class HubConnection {
     this.send({ type: "meeting.transcript", meetingId });
   }
 
+  listTasks(): void {
+    this.send({ type: "task.list" });
+  }
+
   // --- Directory ---
 
   listAgents(): void {

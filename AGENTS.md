@@ -43,3 +43,19 @@ Supported providers:
 - `cli-claude` — Uses your local Claude CLI auth (recommended)
 - `cli-gemini` — Uses your local Gemini CLI auth
 - `openai` — Any OpenAI-compatible API (OpenRouter, Ollama, etc.)
+
+## Project UI Skill
+
+This worktree has a project-local UI skill at:
+
+- `.agents/skills/archon-web-ui/`
+
+Use `archon-web-ui` for operator-facing interface work in this worktree:
+
+- layout and navigation changes
+- task/meeting/history observability surfaces
+- workflow board hierarchy work
+- deciding what should be prominent, hidden, collapsed, or interruptive
+
+Treat the docs in `docs/` as supporting rationale and roadmap.
+Treat `archon-web-ui` as the active reusable style/workflow surface for future UI changes in this worktree.

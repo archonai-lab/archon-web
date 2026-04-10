@@ -152,6 +152,10 @@ export interface MeetingTranscriptRequestMessage {
   meetingId: string;
 }
 
+export interface TaskListRequestMessage {
+  type: "task.list";
+}
+
 export interface PingMessage {
   type: "ping";
 }
@@ -381,6 +385,54 @@ export interface AgentsDespawnedMessage {
   agentIds: string[];
 }
 
+export type TaskStatus = "pending" | "in_progress" | "done" | "failed";
+
+export interface WorkflowTask {
+  id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  assignedTo: string | null;
+  assignedBy: string | null;
+  meetingId: string | null;
+  repoScope: unknown;
+  projectTag?: string | null;
+  workflowName?: string | null;
+  execId?: string | null;
+  codexSessionId?: string | null;
+  model?: string | null;
+  durationMs?: number | null;
+  exitCode?: number | null;
+  worktree?: string | null;
+  gitSha?: string | null;
+  result: string | null;
+  version: number;
+  changedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskCreatedMessage {
+  type: "task.created";
+  task: WorkflowTask;
+}
+
+export interface TaskUpdatedMessage {
+  type: "task.updated";
+  task: WorkflowTask;
+}
+
+export interface TaskListResultMessage {
+  type: "task.list.result";
+  tasks: WorkflowTask[];
+  total: number;
+}
+
+export interface TaskGetResultMessage {
+  type: "task.get.result";
+  task: WorkflowTask;
+}
+
 export interface ConfigResultMessage {
   type: "config.result";
   config: HubConfig;
@@ -501,6 +553,10 @@ export type HubMessage =
   | MeetingActiveListResultMessage
   | MeetingHistoryResultMessage
   | MeetingTranscriptResultMessage
+  | TaskCreatedMessage
+  | TaskUpdatedMessage
+  | TaskListResultMessage
+  | TaskGetResultMessage
   | AgentsSpawnedMessage
   | AgentsSpawnFailedMessage
   | AgentProcessErrorMessage
