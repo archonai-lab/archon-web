@@ -550,6 +550,8 @@
   width: min(1040px, calc(100vw - 40px));
   max-height: calc(100vh - 72px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--wf-border);
   border-radius: 10px;
   background: var(--wf-surface);
@@ -658,8 +660,9 @@
 
 .workflow-modal-body {
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
-  max-height: calc(100vh - 220px);
+  grid-template-columns: minmax(280px, var(--workflow-left-panel-width, 360px)) 14px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -667,15 +670,66 @@
   min-height: 0;
   overflow-y: auto;
   padding: 18px 20px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wf-surface-4) rgba(24, 24, 27, 0.35);
+}
+
+.workflow-modal-col::-webkit-scrollbar,
+.workflow-result-pre::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.workflow-modal-col::-webkit-scrollbar-track,
+.workflow-result-pre::-webkit-scrollbar-track {
+  background: rgba(24, 24, 27, 0.45);
+  border-radius: 999px;
+}
+
+.workflow-modal-col::-webkit-scrollbar-thumb,
+.workflow-result-pre::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3f3f46, #27272a);
+  border: 2px solid rgba(24, 24, 27, 0.45);
+  border-radius: 999px;
+}
+
+.workflow-modal-col::-webkit-scrollbar-thumb:hover,
+.workflow-result-pre::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #71717a, #3f3f46);
 }
 
 .workflow-modal-col-left {
   background: var(--wf-bg);
   border-right: 1px solid var(--wf-border-faint);
+  min-width: 0;
 }
 
 .workflow-modal-col-right {
   background: var(--wf-surface);
+  min-width: 0;
+}
+
+.workflow-modal-resize {
+  display: inline-flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--wf-border-faint);
+  border-right: 1px solid var(--wf-border-faint);
+  background: rgba(24, 24, 27, 0.96);
+  cursor: col-resize;
+}
+
+.workflow-modal-resize:hover {
+  background: rgba(39, 39, 42, 0.96);
+}
+
+.workflow-modal-resize-grip {
+  width: 2px;
+  margin: 14px 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, var(--wf-border-mid), transparent);
 }
 
 .workflow-drawer-section {
@@ -808,6 +862,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px;
+  overflow: auto;
 }
 
 .workflow-meeting-name {
@@ -892,6 +947,8 @@
   line-height: 1.72;
   white-space: pre-wrap;
   word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wf-surface-4) rgba(24, 24, 27, 0.35);
 }
 
 .workflow-result-pre.is-failed {
@@ -958,7 +1015,7 @@
   }
 
   .workflow-modal-body {
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: minmax(280px, var(--workflow-left-panel-width, 320px)) 14px minmax(0, 1fr);
   }
 }
 
@@ -987,6 +1044,10 @@
   .workflow-modal-col-left {
     border-right: 0;
     border-bottom: 1px solid var(--wf-border-faint);
+  }
+
+  .workflow-modal-resize {
+    display: none;
   }
 }
 
@@ -1036,6 +1097,10 @@
   .workflow-modal-header {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .workflow-modal-resize {
+    display: none;
   }
 
   .workflow-meeting-box {

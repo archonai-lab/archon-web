@@ -173,6 +173,7 @@ function TaskModal({
   onOpenMeeting: (meetingId: string) => void;
 }) {
   const [debugOpen, setDebugOpen] = useState(true);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(360);
   const tone = statusTone(task.status);
   const projectTag = deriveProjectTag(task);
   const projectTone = projectToneStyle(projectTag);
@@ -194,6 +195,34 @@ function TaskModal({
     setDebugOpen(true);
   }, [task.id]);
 
+  useEffect(() => {
+    setLeftPanelWidth(360);
+  }, [task.id]);
+
+  function startResize(clientX: number) {
+    const startX = clientX;
+    const startWidth = leftPanelWidth;
+
+    const onMove = (event: MouseEvent) => {
+      const delta = event.clientX - startX;
+      const next = Math.min(560, Math.max(280, startWidth + delta));
+      setLeftPanelWidth(next);
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function handleResizeMouseDown(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    startResize(event.clientX);
+  }
+
   return (
     <div className="workflow-modal-overlay">
       <button
@@ -208,6 +237,7 @@ function TaskModal({
         aria-modal="true"
         aria-label={`${task.title} details`}
         className="workflow-modal"
+        style={{ ["--workflow-left-panel-width" as string]: `${leftPanelWidth}px` }}
       >
         <div className="workflow-modal-header" data-tone={tone}>
           <span className="workflow-row-dot" data-tone={tone} />
@@ -298,6 +328,15 @@ function TaskModal({
               </div>
             </section>
           </div>
+
+          <button
+            type="button"
+            aria-label="Resize task detail panels"
+            className="workflow-modal-resize"
+            onMouseDown={handleResizeMouseDown}
+          >
+            <span className="workflow-modal-resize-grip" />
+          </button>
 
           <div className="workflow-modal-col workflow-modal-col-right">
             <section className="workflow-drawer-section">

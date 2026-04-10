@@ -97,6 +97,7 @@ describe("WorkflowBoard", () => {
     expect(modal.getAllByText("Auth Sprint Planning").length).toBeGreaterThan(0);
     expect(modal.getByText("Error output")).toBeInTheDocument();
     expect(modal.getByText(/Health check failed/)).toBeInTheDocument();
+    expect(modal.getByRole("button", { name: /Resize task detail panels/i })).toBeInTheDocument();
 
     await user.click(modal.getByRole("button", { name: /Open transcript/i }));
     expect(onOpenMeeting).toHaveBeenCalledWith("meeting-1");
