@@ -1,0 +1,4 @@
+interface:
+  display_name: "Archon Web UI"
+  short_description: "Carry archon-web's operator-first UI direction across PRs"
+  default_prompt: "Use $archon-web-ui to keep this archon-web UI change aligned with the project's operator-first design direction."

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HubConnection } from "./lib/ws";
 import type {
   AgentCard, HubMessage, MeetingState, Toast,
-  Department, Role, MeetingSummary, TranscriptEntry, HubConfig,
+  Department, Role, MeetingSummary, TranscriptEntry, HubConfig, WorkflowTask,
 } from "./lib/types";
 import { MeetingRoom } from "./components/MeetingRoom";
 import { MeetingLauncher } from "./components/MeetingLauncher";
@@ -15,10 +15,28 @@ import { MeetingTranscript } from "./components/MeetingTranscript";
 import { ConnectionSettings } from "./components/ConnectionSettings";
 import { HubSettings } from "./components/HubSettings";
 import { Toasts } from "./components/Toasts";
+import { WorkflowBoard } from "./components/WorkflowBoard";
+import "./app-shell.css";
 
 const hub = new HubConnection("ws://localhost:9500", "ceo");
 
-type View = "home" | "agent-detail" | "agent-create" | "departments" | "roles" | "meeting-history" | "meeting-transcript" | "active-meetings" | "settings";
+type View = "home" | "agent-detail" | "agent-create" | "departments" | "roles" | "meeting-history" | "meeting-transcript" | "active-meetings" | "workflow-board" | "settings";
+type TranscriptReturnView = "meeting-history" | "workflow-board";
+
+function sortTasks(tasks: WorkflowTask[]): WorkflowTask[] {
+  return [...tasks].sort((left, right) => (
+    new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  ));
+}
+
+function upsertTask(tasks: WorkflowTask[], task: WorkflowTask): WorkflowTask[] {
+  const index = tasks.findIndex((entry) => entry.id === task.id);
+  if (index === -1) return sortTasks([...tasks, task]);
+
+  const nextTasks = [...tasks];
+  nextTasks[index] = task;
+  return sortTasks(nextTasks);
+}
 
 function useHub() {
   const [connected, setConnected] = useState(false);
@@ -33,6 +51,9 @@ function useHub() {
     meetingId: string; title: string; phase: string; initiator: string; participants: string[]; status: string;
   }>>([]);
   const [meetingHistory, setMeetingHistory] = useState<MeetingSummary[]>([]);
+  const [workflowTasks, setWorkflowTasks] = useState<WorkflowTask[]>([]);
+  const [workflowTaskTotal, setWorkflowTaskTotal] = useState(0);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcript, setTranscript] = useState<{
     meeting: { id: string; title: string; status: string; methodology: string; initiatorId: string; agenda: unknown; decisions: unknown[]; actionItems: unknown[]; summary: string | null; createdAt: string; completedAt: string | null };
     messages: TranscriptEntry[];
@@ -59,6 +80,9 @@ function useHub() {
     setMeetings(new Map());
     setActiveMeetingId(null);
     setMeetingHistory([]);
+    setWorkflowTasks([]);
+    setWorkflowTaskTotal(0);
+    setTranscriptLoading(false);
     setTranscript(null);
     hub.reconnect(agentId, url);
   }, []);
@@ -68,6 +92,7 @@ function useHub() {
       switch (msg.type) {
         case "auth.ok":
           setConnected(true);
+          hub.listTasks();
           // Restore active meetings on reconnect
           if (hub.meetings.size > 0) {
             setMeetings(new Map(hub.meetings));
@@ -173,11 +198,24 @@ function useHub() {
           setMeetingHistory(msg.meetings);
           break;
         case "meeting.transcript.result":
+          setTranscriptLoading(false);
           setTranscript({
             meeting: msg.meeting,
             messages: msg.messages,
             participants: msg.participants,
           });
+          break;
+        case "task.list.result":
+          setWorkflowTasks(sortTasks(msg.tasks));
+          setWorkflowTaskTotal(msg.total);
+          break;
+        case "task.created":
+          setWorkflowTasks((prev) => upsertTask(prev, msg.task));
+          setWorkflowTaskTotal((prev) => Math.max(prev + 1, 1));
+          break;
+        case "task.updated":
+          setWorkflowTasks((prev) => upsertTask(prev, msg.task));
+          setWorkflowTaskTotal((prev) => Math.max(prev, 1));
           break;
         case "agents.spawned":
           addToast(`Spawning agents: ${msg.agentIds.join(", ")}`, "info");
@@ -191,6 +229,7 @@ function useHub() {
           addToast(`Agent ${msg.agentId} crashed: ${msg.reason}`, "warning");
           break;
         case "error":
+          setTranscriptLoading(false);
           addToast(`${msg.message}`, "warning");
           break;
       }
@@ -207,6 +246,8 @@ function useHub() {
     activeMeetingId, setActiveMeetingId,
     activeMeetingsList, setActiveMeetingsList,
     hubConfig,
+    workflowTasks, workflowTaskTotal,
+    transcriptLoading, setTranscriptLoading,
     toasts, dismissToast, connectAs,
     meetingHistory, transcript, setTranscript,
   };
@@ -218,6 +259,8 @@ function App() {
     activeMeetingId, setActiveMeetingId,
     activeMeetingsList,
     hubConfig,
+    workflowTasks, workflowTaskTotal,
+    transcriptLoading, setTranscriptLoading,
     toasts, dismissToast, connectAs,
     meetingHistory, transcript, setTranscript,
   } = useHub();
@@ -225,6 +268,7 @@ function App() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [view, setView] = useState<View>("home");
+  const [transcriptReturnView, setTranscriptReturnView] = useState<TranscriptReturnView>("meeting-history");
   const [historyFilter, setHistoryFilter] = useState("all");
 
   const activeMeeting = activeMeetingId ? meetings.get(activeMeetingId) : null;
@@ -238,8 +282,21 @@ function App() {
     setView(v);
     setActiveMeetingId(null);
     setSelectedAgentId(null);
+    if (v !== "meeting-transcript") {
+      setTranscriptLoading(false);
+      setTranscript(null);
+    }
     setSidebarOpen(false);
   }, [setActiveMeetingId]);
+
+  const openTranscript = useCallback((meetingId: string, returnView: TranscriptReturnView) => {
+    setTranscriptReturnView(returnView);
+    setTranscriptLoading(true);
+    setTranscript(null);
+    hub.getMeetingTranscript(meetingId);
+    setView("meeting-transcript");
+    setSidebarOpen(false);
+  }, [setTranscript]);
 
   // Filter out CEO from invitee list
   const invitableAgents = agents.filter((a) => a.id !== hub.agentId);
@@ -247,7 +304,7 @@ function App() {
 
   if (!connected) {
     return (
-      <div className="h-screen bg-zinc-950 text-zinc-200">
+      <div className="archon-shell">
         <ConnectionSettings
           currentAgentId={hub.agentId}
           currentUrl={hub.url}
@@ -262,11 +319,35 @@ function App() {
 
   const renderMain = () => {
     // Meeting transcript view
+    if (view === "meeting-transcript" && transcriptLoading && !transcript) {
+      return (
+        <div className="archon-shell__panel flex flex-1 items-center justify-center text-sm text-zinc-500">
+          Loading transcript...
+        </div>
+      );
+    }
+
     if (view === "meeting-transcript" && transcript) {
       return (
         <MeetingTranscript
           data={transcript}
-          onBack={() => { setTranscript(null); setView("meeting-history"); }}
+          onBack={() => {
+            setTranscript(null);
+            setView(transcriptReturnView);
+          }}
+        />
+      );
+    }
+
+    if (view === "workflow-board") {
+      return (
+        <WorkflowBoard
+          tasks={workflowTasks}
+          total={workflowTaskTotal}
+          meetingHistory={meetingHistory}
+          currentAgentId={hub.agentId}
+          onRefresh={() => hub.listTasks()}
+          onOpenMeeting={(meetingId) => openTranscript(meetingId, "workflow-board")}
         />
       );
     }
@@ -274,34 +355,37 @@ function App() {
     // Active meetings browser
     if (view === "active-meetings") {
       return (
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-zinc-100">Active Meetings</h2>
+        <div className="archon-shell__panel overflow-y-auto">
+          <div className="archon-shell__panel-header">
+            <div>
+              <h2 className="archon-shell__panel-title">Active Meetings</h2>
+              <p className="archon-shell__panel-sub">Live hub rooms and joinable sessions.</p>
+            </div>
             <button
               onClick={() => hub.listActiveMeetings()}
-              className="px-3 py-1 rounded text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+              className="archon-shell__button"
             >
               Refresh
             </button>
           </div>
           {activeMeetingsList.length === 0 ? (
-            <p className="text-zinc-500 text-sm">No active meetings right now.</p>
+            <div className="archon-shell__empty">No active meetings right now.</div>
           ) : (
-            <div className="space-y-3">
+            <div className="archon-shell__grid">
               {activeMeetingsList.map((m) => {
                 const alreadyJoined = meetings.has(m.meetingId);
                 return (
                   <div
                     key={m.meetingId}
-                    className="bg-zinc-900 border border-zinc-800 rounded-lg p-4"
+                    className="archon-shell__panel-card archon-shell__meeting-card"
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium text-zinc-200">{m.title}</h3>
-                      <span className="text-xs font-mono text-zinc-500 uppercase">{m.phase}</span>
+                    <div className="archon-shell__meeting-card-head">
+                      <h3 className="archon-shell__meeting-card-title">{m.title}</h3>
+                      <span className="archon-shell__meeting-card-phase">{m.phase}</span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-zinc-500 mb-3">
-                      <span>Initiator: <span className="text-zinc-400">{m.initiator}</span></span>
-                      <span>Participants: <span className="text-zinc-400">{m.participants.join(", ")}</span></span>
+                    <div className="archon-shell__meeting-meta">
+                      <span>Initiator: <strong>{m.initiator}</strong></span>
+                      <span>Participants: <strong>{m.participants.join(", ")}</strong></span>
                     </div>
                     {alreadyJoined ? (
                       <button
@@ -309,7 +393,7 @@ function App() {
                           setActiveMeetingId(m.meetingId);
                           setView("home");
                         }}
-                        className="px-4 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                        className="archon-shell__button archon-shell__button--success"
                       >
                         View Meeting
                       </button>
@@ -319,7 +403,7 @@ function App() {
                           hub.joinMeeting(m.meetingId);
                           setView("home");
                         }}
-                        className="px-4 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                        className="archon-shell__button archon-shell__button--primary"
                       >
                         Join Meeting
                       </button>
@@ -344,10 +428,7 @@ function App() {
               cursor,
             });
           }}
-          onViewTranscript={(meetingId) => {
-            hub.getMeetingTranscript(meetingId);
-            setView("meeting-transcript");
-          }}
+          onViewTranscript={(meetingId) => openTranscript(meetingId, "meeting-history")}
           onClose={() => navigateTo("home")}
           statusFilter={historyFilter}
           onFilterChange={(f) => {
@@ -454,65 +535,60 @@ function App() {
   };
 
   return (
-    <div className="h-screen flex bg-zinc-950 text-zinc-200 relative">
+    <div className="archon-shell relative">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          className="archon-shell__overlay md:hidden"
           onClick={closeSidebar}
         />
       )}
 
       {/* Sidebar */}
-      <div className={`
-        fixed inset-y-0 left-0 z-30 w-64 bg-zinc-950 border-r border-zinc-800 flex flex-col
-        transform transition-transform duration-200 ease-in-out
-        md:relative md:translate-x-0 md:flex-shrink-0
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-      `}>
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+      <div className={`archon-shell__sidebar${sidebarOpen ? " is-open" : ""}`}>
+        <div className="archon-shell__sidebar-header">
           <div>
-            <h1 className="text-lg font-bold text-zinc-100">Archon</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-xs text-zinc-500">
-                Connected as {hub.agentId}
+            <div className="archon-shell__brand">
+              <span className="archon-shell__brand-mark">
+                <span className="archon-shell__brand-dot" />
               </span>
+              <span>Archon</span>
+            </div>
+            <div className="archon-shell__brand-meta">
+              <span>connected</span>
+              <span>·</span>
+              <span>{hub.agentId}</span>
             </div>
           </div>
           <button
             onClick={closeSidebar}
-            className="md:hidden text-zinc-500 hover:text-zinc-300 text-lg"
+            className="archon-shell__close md:hidden"
           >
             &times;
           </button>
         </div>
 
         {/* Meeting list */}
-        <div className="p-3 flex-1 overflow-y-auto">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-zinc-500 uppercase">Meetings</span>
-            <button
-              onClick={() => { navigateTo("home"); setActiveMeetingId(null); }}
-              className="text-xs text-blue-400 hover:text-blue-300"
-            >
-              + New
-            </button>
-          </div>
+        <div className="archon-shell__sidebar-body">
+          <div className="archon-shell__section-label">Meetings</div>
+          <button
+            onClick={() => { navigateTo("home"); setActiveMeetingId(null); }}
+            className="archon-shell__link"
+          >
+            <span className="archon-shell__link-title">+ New Meeting</span>
+          </button>
           {[...meetings.values()].map((m) => (
             <button
               key={m.id}
               onClick={() => { setActiveMeetingId(m.id); setSelectedAgentId(null); setView("home"); closeSidebar(); }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
-                activeMeetingId === m.id
-                  ? "bg-zinc-800 text-zinc-200"
-                  : "text-zinc-400 hover:bg-zinc-800/50"
-              }`}
+              className={`archon-shell__link${activeMeetingId === m.id ? " is-active" : ""}`}
             >
-              <div className="truncate font-medium">{m.title}</div>
-              <div className="text-xs text-zinc-600">
-                {m.status === "active" ? m.phase.toUpperCase() : m.status.toUpperCase()}
-              </div>
+              <span className="archon-shell__meeting-link">
+                <span className="archon-shell__link-title">{m.title}</span>
+                <span className="archon-shell__meeting-phase">
+                  {m.status === "active" ? m.phase.toUpperCase() : m.status.toUpperCase()}
+                </span>
+              </span>
             </button>
           ))}
 
@@ -522,89 +598,82 @@ function App() {
               hub.listActiveMeetings();
               navigateTo("active-meetings");
             }}
-            className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
-              view === "active-meetings"
-                ? "bg-zinc-800 text-zinc-200"
-                : "text-zinc-500 hover:bg-zinc-800/50"
-            }`}
+            className={`archon-shell__link${view === "active-meetings" ? " is-active" : ""}`}
           >
-            <span className="text-xs">Browse Active</span>
+            <span className="archon-shell__link-title">Browse Active</span>
           </button>
 
           {/* History link */}
           <button
             onClick={() => navigateTo("meeting-history")}
-            className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 transition-colors ${
-              view === "meeting-history" || view === "meeting-transcript"
-                ? "bg-zinc-800 text-zinc-200"
-                : "text-zinc-500 hover:bg-zinc-800/50"
-            }`}
+            className={`archon-shell__link${view === "meeting-history" || view === "meeting-transcript" ? " is-active" : ""}`}
           >
-            <span className="text-xs">History</span>
+            <span className="archon-shell__link-title">History</span>
             {completedMeetingCount > 0 && (
-              <span className="text-xs text-zinc-600 ml-1">({completedMeetingCount})</span>
+              <span className="archon-shell__link-meta">({completedMeetingCount})</span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              hub.listTasks();
+              navigateTo("workflow-board");
+            }}
+            className={`archon-shell__link${view === "workflow-board" ? " is-active" : ""}`}
+          >
+            <span className="archon-shell__link-title">Workflow Board</span>
+            {workflowTaskTotal > 0 && (
+              <span className="archon-shell__link-meta">({workflowTaskTotal})</span>
             )}
           </button>
 
           {/* Organization section */}
-          <div className="mt-4">
-            <span className="text-xs font-medium text-zinc-500 uppercase block mb-2">Organization</span>
+          <div className="archon-shell__section-label">Organization</div>
             <button
               onClick={() => navigateTo("departments")}
-              className={`w-full text-left px-3 py-1.5 rounded-lg text-sm mb-1 transition-colors ${
-                view === "departments" ? "bg-zinc-800 text-zinc-200" : "text-zinc-400 hover:bg-zinc-800/50"
-              }`}
+              className={`archon-shell__link${view === "departments" ? " is-active" : ""}`}
             >
-              Departments ({departments.length})
+              <span className="archon-shell__link-title">Departments</span>
+              <span className="archon-shell__link-meta">({departments.length})</span>
             </button>
             <button
               onClick={() => navigateTo("roles")}
-              className={`w-full text-left px-3 py-1.5 rounded-lg text-sm mb-1 transition-colors ${
-                view === "roles" ? "bg-zinc-800 text-zinc-200" : "text-zinc-400 hover:bg-zinc-800/50"
-              }`}
+              className={`archon-shell__link${view === "roles" ? " is-active" : ""}`}
             >
-              Roles ({roles.length})
+              <span className="archon-shell__link-title">Roles</span>
+              <span className="archon-shell__link-meta">({roles.length})</span>
             </button>
             <button
               onClick={() => {
                 hub.getConfig();
                 navigateTo("settings");
               }}
-              className={`w-full text-left px-3 py-1.5 rounded-lg text-sm mb-1 transition-colors ${
-                view === "settings" ? "bg-zinc-800 text-zinc-200" : "text-zinc-400 hover:bg-zinc-800/50"
-              }`}
+              className={`archon-shell__link${view === "settings" ? " is-active" : ""}`}
             >
-              Settings
+              <span className="archon-shell__link-title">Settings</span>
             </button>
-          </div>
         </div>
 
         {/* Agents */}
-        <div className="p-3 border-t border-zinc-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-zinc-500 uppercase">
-              Agents ({agents.length})
-            </span>
-            <button
-              onClick={() => navigateTo("agent-create")}
-              className="text-xs text-blue-400 hover:text-blue-300"
-            >
-              + New
-            </button>
-          </div>
-          <div className="space-y-1 max-h-48 overflow-y-auto">
+        <div className="archon-shell__sidebar-footer">
+          <div className="archon-shell__section-label">Agents ({agents.length})</div>
+          <button
+            onClick={() => navigateTo("agent-create")}
+            className="archon-shell__link"
+          >
+            <span className="archon-shell__link-title">+ New Agent</span>
+          </button>
+          <div className="archon-shell__agent-list">
             {agents.map((a) => (
               <button
                 key={a.id}
                 onClick={() => { setSelectedAgentId(a.id); setActiveMeetingId(null); setView("agent-detail"); closeSidebar(); }}
-                className={`w-full flex items-center gap-2 px-2 py-1 rounded transition-colors text-left ${
-                  selectedAgentId === a.id ? "bg-zinc-800" : "hover:bg-zinc-800/50"
-                }`}
+                className={`archon-shell__agent-link${selectedAgentId === a.id ? " is-active" : ""}`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full ${
+                <div className={`archon-shell__agent-dot ${
                   a.activity?.startsWith("in_meeting:") ? "bg-amber-500" : a.activity === "connected" ? "bg-emerald-500" : "bg-zinc-600"
                 }`} />
-                <span className="text-xs text-zinc-400 truncate">{a.displayName}</span>
+                <span className="archon-shell__agent-name">{a.displayName}</span>
               </button>
             ))}
           </div>
@@ -612,18 +681,18 @@ function App() {
       </div>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="archon-shell__main">
         {/* Mobile header */}
-        <div className="md:hidden flex items-center gap-3 p-3 border-b border-zinc-800">
+        <div className="archon-shell__mobile-header md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-zinc-400 hover:text-zinc-200"
+            className="archon-shell__mobile-menu"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="text-sm font-bold text-zinc-100">Archon</span>
+          <span className="archon-shell__mobile-title">Archon</span>
         </div>
 
         {renderMain()}

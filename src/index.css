@@ -1,4 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap");
 @import "tailwindcss";
+
+:root {
+  --font-archon-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-archon-mono: "DM Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+@keyframes archon-pulse-dot {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    opacity: 0.72;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes archon-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes archon-pulse-warn {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.archon-pulse-dot {
+  animation: archon-pulse-dot 1.8s ease-in-out infinite;
+}
+
+.archon-shimmer {
+  animation: archon-shimmer 4s ease-in-out infinite;
+}
+
+.archon-pulse-warn {
+  animation: archon-pulse-warn 1.6s ease-in-out infinite;
+}
 
 @keyframes slide-in {
   from {
